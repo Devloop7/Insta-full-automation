@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  instabot:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./downloads:/app/downloads
+      - ./sessions:/app/sessions
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    env_file:
+      - .env
+    restart: unless-stopped

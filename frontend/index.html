@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="en" x-data="app()" x-init="init()">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>InstaBot Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  <style>
+    [x-cloak] { display: none !important; }
+    .sidebar-link { @apply flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all; }
+    .sidebar-link.active { @apply bg-purple-600 text-white shadow-md; }
+    .sidebar-link:not(.active) { @apply text-gray-400 hover:bg-gray-800 hover:text-white; }
+    .card { @apply bg-gray-800 rounded-xl p-5 border border-gray-700; }
+    .btn-primary { @apply bg-purple-600 hover:bg-purple-500 text-white font-semibold px-4 py-2 rounded-lg transition-colors text-sm; }
+    .btn-secondary { @apply bg-gray-700 hover:bg-gray-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors text-sm; }
+    .btn-danger { @apply bg-red-600 hover:bg-red-500 text-white font-semibold px-4 py-2 rounded-lg transition-colors text-sm; }
+    .btn-success { @apply bg-green-600 hover:bg-green-500 text-white font-semibold px-4 py-2 rounded-lg transition-colors text-sm; }
+    .input { @apply bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500 w-full; }
+    .label { @apply block text-xs font-semibold text-gray-400 mb-1 uppercase tracking-wide; }
+    .badge-pending { @apply px-2 py-0.5 rounded text-xs font-bold bg-yellow-900 text-yellow-300; }
+    .badge-queued { @apply px-2 py-0.5 rounded text-xs font-bold bg-blue-900 text-blue-300; }
+    .badge-uploaded { @apply px-2 py-0.5 rounded text-xs font-bold bg-green-900 text-green-300; }
+    .badge-failed { @apply px-2 py-0.5 rounded text-xs font-bold bg-red-900 text-red-300; }
+    .badge-downloaded { @apply px-2 py-0.5 rounded text-xs font-bold bg-purple-900 text-purple-300; }
+    .badge-skipped { @apply px-2 py-0.5 rounded text-xs font-bold bg-gray-700 text-gray-400; }
+    .toast { @apply fixed bottom-6 right-6 px-5 py-3 rounded-xl text-white font-semibold shadow-2xl z-50 transition-all; }
+    body { background-color: #0f1117; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #1a1f2e; }
+    ::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 4px; }
+    .pulse-dot { width:8px; height:8px; border-radius:50%; }
+    .pulse-dot.green { background:#22c55e; animation: pulse 2s infinite; }
+    .pulse-dot.red { background:#ef4444; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
+  </style>
+</head>
+
+<body class="flex h-screen overflow-hidden">
+
+<!-- ── Sidebar ──────────────────────────────────────────────────────────── -->
+<aside class="w-60 flex-shrink-0 bg-gray-900 border-r border-gray-800 flex flex-col">
+  <div class="px-5 py-5 border-b border-gray-800">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+        <i class="fa-brands fa-instagram text-white text-sm"></i>
+      </div>
+      <div>
+        <div class="font-bold text-white text-sm leading-none">InstaBot</div>
+        <div class="text-xs text-gray-500">Automation Dashboard</div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+    <a @click="page='dashboard'" :class="page==='dashboard'?'active':''" class="sidebar-link cursor-pointer">
+      <i class="fa-solid fa-chart-line w-4"></i> Dashboard
+    </a>
+    <a @click="page='accounts'" :class="page==='accounts'?'active':''" class="sidebar-link cursor-pointer">
+      <i class="fa-solid fa-user-circle w-4"></i> Accounts
+    </a>
+    <a @click="page='sources'" :class="page==='sources'?'active':''" class="sidebar-link cursor-pointer">
+      <i class="fa-solid fa-rss w-4"></i> Source Accounts
+    </a>
+    <a @click="page='content'" :class="page==='content'?'active':''" class="sidebar-link cursor-pointer">
+      <i class="fa-solid fa-film w-4"></i> Content Queue
+    </a>
+    <a @click="page='agent'" :class="page==='agent'?'active':''" class="sidebar-link cursor-pointer">
+      <i class="fa-solid fa-robot w-4"></i> AI Agent
+    </a>
+    <a @click="page='scheduler'" :class="page==='scheduler'?'active':''" class="sidebar-link cursor-pointer">
+      <i class="fa-solid fa-clock w-4"></i> Scheduler
+    </a>
+    <a @click="page='logs'" :class="page==='logs'?'active':''" class="sidebar-link cursor-pointer">
+      <i class="fa-solid fa-terminal w-4"></i> Logs
+    </a>
+  </nav>
+
+  <!-- Scheduler status pill -->
+  <div class="px-4 py-4 border-t border-gray-800">
+    <div class="flex items-center gap-2 text-xs">
+      <div class="pulse-dot" :class="schedulerRunning ? 'green' : 'red'"></div>
+      <span class="text-gray-400">Scheduler</span>
+      <span :class="schedulerRunning ? 'text-green-400' : 'text-red-400'" class="font-semibold">
+        <span x-text="schedulerRunning ? 'Running' : 'Stopped'"></span>
+      </span>
+    </div>
+    <div class="text-xs text-gray-600 mt-1" x-text="'Jobs: ' + jobCount"></div>
+  </div>
+</aside>
+
+<!-- ── Main content ──────────────────────────────────────────────────────── -->
+<main class="flex-1 overflow-y-auto bg-gray-950">
+
+  <!-- Top bar -->
+  <header class="sticky top-0 z-10 bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center justify-between">
+    <h1 class="text-lg font-bold text-white" x-text="pageTitle()"></h1>
+    <div class="flex items-center gap-3">
+      <button @click="refreshAll()" class="btn-secondary text-xs">
+        <i class="fa-solid fa-sync mr-1" :class="loading ? 'fa-spin' : ''"></i> Refresh
+      </button>
+    </div>
+  </header>
+
+  <div class="p-6">
+
+    <!-- ── DASHBOARD ── -->
+    <div x-show="page==='dashboard'" x-cloak>
+      <!-- Stats grid -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="card text-center">
+          <div class="text-3xl font-bold text-green-400" x-text="stats.total_uploaded ?? '—'"></div>
+          <div class="text-xs text-gray-400 mt-1 uppercase tracking-wide">Posted</div>
+        </div>
+        <div class="card text-center">
+          <div class="text-3xl font-bold text-blue-400" x-text="stats.total_queued ?? '—'"></div>
+          <div class="text-xs text-gray-400 mt-1 uppercase tracking-wide">Queued</div>
+        </div>
+        <div class="card text-center">
+          <div class="text-3xl font-bold text-yellow-400" x-text="stats.total_pending ?? '—'"></div>
+          <div class="text-xs text-gray-400 mt-1 uppercase tracking-wide">Pending</div>
+        </div>
+        <div class="card text-center">
+          <div class="text-3xl font-bold text-red-400" x-text="stats.total_failed ?? '—'"></div>
+          <div class="text-xs text-gray-400 mt-1 uppercase tracking-wide">Failed</div>
+        </div>
+      </div>
+
+      <!-- Agent stats -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="card text-center">
+          <div class="text-3xl font-bold text-pink-400" x-text="stats.likes_today ?? '—'"></div>
+          <div class="text-xs text-gray-400 mt-1 uppercase tracking-wide">Likes Today</div>
+        </div>
+        <div class="card text-center">
+          <div class="text-3xl font-bold text-purple-400" x-text="stats.comments_today ?? '—'"></div>
+          <div class="text-xs text-gray-400 mt-1 uppercase tracking-wide">Comments Today</div>
+        </div>
+        <div class="card text-center">
+          <div class="text-3xl font-bold text-cyan-400" x-text="stats.source_accounts_count ?? '—'"></div>
+          <div class="text-xs text-gray-400 mt-1 uppercase tracking-wide">Sources</div>
+        </div>
+        <div class="card text-center">
+          <div class="text-3xl font-bold text-orange-400" x-text="stats.target_accounts_count ?? '—'"></div>
+          <div class="text-xs text-gray-400 mt-1 uppercase tracking-wide">Target Accounts</div>
+        </div>
+      </div>
+
+      <!-- Quick actions -->
+      <div class="card mb-6">
+        <h3 class="font-bold mb-4 text-white">Quick Actions</h3>
+        <div class="flex flex-wrap gap-3" x-show="targetAccounts.length > 0">
+          <template x-for="acc in targetAccounts" :key="acc.id">
+            <div class="bg-gray-900 rounded-lg p-4 border border-gray-700 min-w-[200px]">
+              <div class="font-semibold text-white mb-1">@<span x-text="acc.username"></span></div>
+              <div class="text-xs text-gray-400 mb-3">
+                <span x-text="acc.niche"></span> •
+                <span x-text="acc.followers_count.toLocaleString()"></span> followers
+              </div>
+              <div class="flex gap-2 flex-wrap">
+                <button @click="triggerScrape(acc.id)" class="btn-primary text-xs">
+                  <i class="fa-solid fa-download mr-1"></i>Scrape
+                </button>
+                <button @click="triggerPipeline(acc.id)" class="btn-secondary text-xs">
+                  <i class="fa-solid fa-play mr-1"></i>Pipeline
+                </button>
+                <button @click="postNow(acc.id)" class="btn-success text-xs">
+                  <i class="fa-solid fa-paper-plane mr-1"></i>Post Now
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
+        <div x-show="targetAccounts.length === 0" class="text-gray-500 text-sm">
+          No target accounts yet. <a @click="page='accounts'" class="text-purple-400 cursor-pointer hover:underline">Add one →</a>
+        </div>
+      </div>
+
+      <!-- Last activity -->
+      <div class="card">
+        <h3 class="font-bold mb-4 text-white">Last Activity</h3>
+        <div class="text-sm space-y-1 text-gray-400">
+          <div>Last post: <span class="text-white" x-text="stats.last_post_at ? new Date(stats.last_post_at).toLocaleString() : 'Never'"></span></div>
+          <div>Last scrape: <span class="text-white" x-text="stats.last_scrape_at ? new Date(stats.last_scrape_at).toLocaleString() : 'Never'"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ACCOUNTS ── -->
+    <div x-show="page==='accounts'" x-cloak>
+      <div class="flex justify-between items-center mb-5">
+        <p class="text-gray-400 text-sm">Manage the Instagram accounts you post TO.</p>
+        <button @click="openModal('addTarget')" class="btn-primary">
+          <i class="fa-solid fa-plus mr-1"></i> Add Account
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <template x-for="acc in targetAccounts" :key="acc.id">
+          <div class="card">
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold text-sm">
+                  <span x-text="acc.username[0].toUpperCase()"></span>
+                </div>
+                <div>
+                  <div class="font-semibold text-white">@<span x-text="acc.username"></span>
+                    <span :class="acc.is_active ? 'text-green-400 bg-green-900/30' : 'text-red-400 bg-red-900/30'"
+                          class="ml-2 text-xs px-2 py-0.5 rounded-full font-medium"
+                          x-text="acc.is_active ? 'Active' : 'Inactive'"></span>
+                  </div>
+                  <div class="text-xs text-gray-400 mt-0.5">
+                    Niche: <span class="text-purple-300" x-text="acc.niche"></span> •
+                    <span x-text="acc.followers_count.toLocaleString()"></span> followers •
+                    <span x-text="acc.following_count.toLocaleString()"></span> following •
+                    <span x-text="acc.posts_count.toLocaleString()"></span> posts
+                  </div>
+                  <div class="text-xs text-gray-500 mt-0.5" x-show="acc.niche_keywords">
+                    Keywords: <span x-text="acc.niche_keywords"></span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button @click="syncAccount(acc.id)" class="btn-secondary text-xs"><i class="fa-solid fa-sync"></i></button>
+                <button @click="testLogin(acc.id)" class="btn-secondary text-xs"><i class="fa-solid fa-plug"></i> Login</button>
+                <button @click="openEditTarget(acc)" class="btn-secondary text-xs"><i class="fa-solid fa-pen"></i></button>
+                <button @click="deleteTarget(acc.id)" class="btn-danger text-xs"><i class="fa-solid fa-trash"></i></button>
+              </div>
+            </div>
+          </div>
+        </template>
+        <div x-show="targetAccounts.length === 0" class="card text-center text-gray-500 py-10">
+          No accounts yet. Click "Add Account" to get started.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SOURCE ACCOUNTS ── -->
+    <div x-show="page==='sources'" x-cloak>
+      <div class="flex justify-between items-center mb-5">
+        <p class="text-gray-400 text-sm">Accounts to scrape content FROM.</p>
+        <button @click="openModal('addSource')" class="btn-primary">
+          <i class="fa-solid fa-plus mr-1"></i> Add Source
+        </button>
+      </div>
+
+      <!-- Filter by target -->
+      <div class="mb-4">
+        <select x-model="sourceFilter" class="input w-52 bg-gray-800">
+          <option value="">All targets</option>
+          <template x-for="acc in targetAccounts" :key="acc.id">
+            <option :value="acc.id" x-text="'@' + acc.username"></option>
+          </template>
+        </select>
+      </div>
+
+      <div class="space-y-3">
+        <template x-for="src in filteredSources" :key="src.id">
+          <div class="card flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center text-white font-bold text-sm">
+                <span x-text="src.username[0].toUpperCase()"></span>
+              </div>
+              <div>
+                <div class="font-semibold text-white">@<span x-text="src.username"></span>
+                  <span :class="src.is_active ? 'text-green-400' : 'text-gray-500'"
+                        class="ml-2 text-xs" x-text="src.is_active ? '● Active' : '○ Paused'"></span>
+                </div>
+                <div class="text-xs text-gray-400 mt-0.5">
+                  <span x-show="src.scrape_reels" class="mr-2">📹 Reels</span>
+                  <span x-show="src.scrape_posts" class="mr-2">🖼 Posts</span>
+                  <span x-show="src.scrape_stories" class="mr-2">⭕ Stories</span>
+                  • Max <span x-text="src.max_items_per_scrape"></span>/scrape
+                  • Total scraped: <span x-text="src.total_scraped"></span>
+                </div>
+                <div class="text-xs text-gray-500" x-show="src.last_scraped">
+                  Last: <span x-text="src.last_scraped ? new Date(src.last_scraped).toLocaleString() : 'Never'"></span>
+                </div>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <button @click="toggleSource(src)" class="btn-secondary text-xs">
+                <i :class="src.is_active ? 'fa-solid fa-pause' : 'fa-solid fa-play'"></i>
+              </button>
+              <button @click="openEditSource(src)" class="btn-secondary text-xs"><i class="fa-solid fa-pen"></i></button>
+              <button @click="deleteSource(src.id)" class="btn-danger text-xs"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>
+        </template>
+        <div x-show="filteredSources.length === 0" class="card text-center text-gray-500 py-10">
+          No source accounts. Add some to start scraping content.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CONTENT QUEUE ── -->
+    <div x-show="page==='content'" x-cloak>
+      <!-- Filter bar -->
+      <div class="flex flex-wrap gap-3 mb-5 items-center">
+        <select x-model="contentFilter.target_id" @change="loadContent()" class="input w-44 bg-gray-800">
+          <option value="">All accounts</option>
+          <template x-for="acc in targetAccounts" :key="acc.id">
+            <option :value="acc.id" x-text="'@' + acc.username"></option>
+          </template>
+        </select>
+        <select x-model="contentFilter.status" @change="loadContent()" class="input w-36 bg-gray-800">
+          <option value="">All statuses</option>
+          <option value="pending">Pending</option>
+          <option value="downloaded">Downloaded</option>
+          <option value="queued">Queued</option>
+          <option value="uploaded">Uploaded</option>
+          <option value="failed">Failed</option>
+          <option value="skipped">Skipped</option>
+        </select>
+        <button @click="loadContent()" class="btn-secondary text-xs"><i class="fa-solid fa-sync mr-1"></i>Refresh</button>
+
+        <div class="ml-auto flex gap-2">
+          <button @click="triggerScrape(contentFilter.target_id || null)" class="btn-primary text-xs" x-show="contentFilter.target_id">
+            <i class="fa-solid fa-download mr-1"></i> Scrape Now
+          </button>
+          <button @click="triggerDownload(contentFilter.target_id)" class="btn-secondary text-xs" x-show="contentFilter.target_id">
+            <i class="fa-solid fa-cloud-download-alt mr-1"></i> Download
+          </button>
+        </div>
+      </div>
+
+      <!-- Stats chips -->
+      <div class="flex gap-3 mb-5 flex-wrap" x-show="contentStats">
+        <span class="badge-pending">⏳ Pending: <span x-text="contentStats.pending"></span></span>
+        <span class="badge-downloaded">⬇ Downloaded: <span x-text="contentStats.downloaded"></span></span>
+        <span class="badge-queued">📋 Queued: <span x-text="contentStats.queued"></span></span>
+        <span class="badge-uploaded">✅ Posted: <span x-text="contentStats.uploaded"></span></span>
+        <span class="badge-failed">❌ Failed: <span x-text="contentStats.failed"></span></span>
+      </div>
+
+      <!-- Table -->
+      <div class="card overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-gray-500 uppercase text-xs border-b border-gray-700">
+              <th class="pb-3 pr-4">Type</th>
+              <th class="pb-3 pr-4">Status</th>
+              <th class="pb-3 pr-4">Caption</th>
+              <th class="pb-3 pr-4">Scheduled</th>
+              <th class="pb-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="item in contentItems" :key="item.id">
+              <tr class="border-b border-gray-700/50 hover:bg-gray-700/30">
+                <td class="py-3 pr-4">
+                  <span class="text-xs font-bold uppercase" :class="{
+                    'text-pink-400': item.content_type==='reel',
+                    'text-blue-400': item.content_type==='post',
+                    'text-orange-400': item.content_type==='story',
+                  }" x-text="item.content_type"></span>
+                </td>
+                <td class="py-3 pr-4">
+                  <span :class="'badge-' + item.status" x-text="item.status"></span>
+                  <span x-show="item.retry_count > 0" class="text-xs text-gray-500 ml-1">(retry <span x-text="item.retry_count"></span>)</span>
+                </td>
+                <td class="py-3 pr-4 max-w-xs">
+                  <div class="text-gray-300 truncate text-xs" x-text="item.caption || '(no caption)'"></div>
+                  <div class="text-red-400 text-xs" x-show="item.error_msg" x-text="item.error_msg"></div>
+                </td>
+                <td class="py-3 pr-4 text-xs text-gray-400" x-text="item.scheduled_at ? new Date(item.scheduled_at).toLocaleString() : '—'"></td>
+                <td class="py-3">
+                  <div class="flex gap-1">
+                    <button x-show="item.status !== 'uploaded' && item.status !== 'queued'"
+                            @click="approveItem(item.id)" class="btn-success text-xs px-2 py-1">
+                      ✓
+                    </button>
+                    <button x-show="item.status !== 'skipped'"
+                            @click="skipItem(item.id)" class="btn-secondary text-xs px-2 py-1">
+                      ✗
+                    </button>
+                    <button @click="openEditCaption(item)" class="btn-secondary text-xs px-2 py-1">
+                      <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <button @click="deleteItem(item.id)" class="btn-danger text-xs px-2 py-1">
+                      <i class="fa-solid fa-trash"></i>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div x-show="contentItems.length === 0" class="text-center text-gray-500 py-10">
+          No content items found.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── AI AGENT ── -->
+    <div x-show="page==='agent'" x-cloak>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+
+        <!-- Manual trigger -->
+        <div class="card">
+          <h3 class="font-bold text-white mb-4"><i class="fa-solid fa-robot mr-2 text-purple-400"></i>Manual Agent Run</h3>
+          <div class="space-y-3">
+            <div>
+              <label class="label">Target Account</label>
+              <select x-model="agentRun.target_account_id" class="input bg-gray-900">
+                <option value="">Select account…</option>
+                <template x-for="acc in targetAccounts" :key="acc.id">
+                  <option :value="acc.id" x-text="'@' + acc.username"></option>
+                </template>
+              </select>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="label">Likes</label>
+                <input type="number" x-model.number="agentRun.like_count" min="0" max="50" class="input bg-gray-900"/>
+              </div>
+              <div>
+                <label class="label">Comments</label>
+                <input type="number" x-model.number="agentRun.comment_count" min="0" max="10" class="input bg-gray-900"/>
+              </div>
+            </div>
+            <button @click="runAgent()" class="btn-primary w-full" :disabled="!agentRun.target_account_id">
+              <i class="fa-solid fa-play mr-2"></i> Run Agent Now
+            </button>
+          </div>
+        </div>
+
+        <!-- Today's agent stats -->
+        <div class="card">
+          <h3 class="font-bold text-white mb-4"><i class="fa-solid fa-chart-bar mr-2 text-purple-400"></i>Today's Activity</h3>
+          <div class="space-y-3">
+            <div class="flex justify-between items-center bg-gray-900 rounded-lg p-3">
+              <span class="text-gray-400 text-sm">❤️ Likes</span>
+              <span class="font-bold text-pink-400 text-xl" x-text="agentStats.today?.likes ?? 0"></span>
+            </div>
+            <div class="flex justify-between items-center bg-gray-900 rounded-lg p-3">
+              <span class="text-gray-400 text-sm">💬 Comments</span>
+              <span class="font-bold text-purple-400 text-xl" x-text="agentStats.today?.comments ?? 0"></span>
+            </div>
+            <div class="flex justify-between items-center bg-gray-900 rounded-lg p-3">
+              <span class="text-gray-400 text-sm">📊 Total Likes (all time)</span>
+              <span class="font-bold text-gray-300" x-text="agentStats.total?.likes ?? 0"></span>
+            </div>
+            <div class="flex justify-between items-center bg-gray-900 rounded-lg p-3">
+              <span class="text-gray-400 text-sm">📊 Total Comments (all time)</span>
+              <span class="font-bold text-gray-300" x-text="agentStats.total?.comments ?? 0"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Agent log table -->
+      <div class="card">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-white">Agent Activity Log</h3>
+          <button @click="loadAgentLogs()" class="btn-secondary text-xs"><i class="fa-solid fa-sync"></i></button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-gray-500 uppercase text-xs border-b border-gray-700">
+                <th class="pb-2 pr-4">Time</th>
+                <th class="pb-2 pr-4">Action</th>
+                <th class="pb-2 pr-4">Target</th>
+                <th class="pb-2 pr-4">Comment</th>
+                <th class="pb-2">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="log in agentLogs" :key="log.id">
+                <tr class="border-b border-gray-700/40 hover:bg-gray-800/30">
+                  <td class="py-2 pr-4 text-xs text-gray-500" x-text="new Date(log.created_at).toLocaleString()"></td>
+                  <td class="py-2 pr-4">
+                    <span :class="{
+                      'text-pink-400': log.action==='like',
+                      'text-purple-400': log.action==='comment',
+                      'text-blue-400': log.action==='follow',
+                    }" class="font-bold uppercase text-xs" x-text="log.action"></span>
+                  </td>
+                  <td class="py-2 pr-4 text-xs text-gray-300">@<span x-text="log.target_username"></span></td>
+                  <td class="py-2 pr-4 text-xs text-gray-400 max-w-xs truncate" x-text="log.comment_text || '—'"></td>
+                  <td class="py-2">
+                    <span :class="log.success ? 'text-green-400' : 'text-red-400'" x-text="log.success ? '✓' : '✗'"></span>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div x-show="agentLogs.length === 0" class="text-center text-gray-500 py-8">No agent activity yet.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SCHEDULER ── -->
+    <div x-show="page==='scheduler'" x-cloak>
+      <div class="flex gap-3 mb-6">
+        <button @click="startScheduler()" class="btn-success" :disabled="schedulerRunning">
+          <i class="fa-solid fa-play mr-1"></i> Start Scheduler
+        </button>
+        <button @click="stopScheduler()" class="btn-danger" :disabled="!schedulerRunning">
+          <i class="fa-solid fa-stop mr-1"></i> Stop Scheduler
+        </button>
+        <button @click="openModal('addSchedule')" class="btn-primary ml-auto">
+          <i class="fa-solid fa-plus mr-1"></i> New Schedule
+        </button>
+      </div>
+
+      <!-- Scheduler jobs -->
+      <div class="card mb-6">
+        <h3 class="font-bold text-white mb-4">Active Jobs (<span x-text="schedulerJobs.length"></span>)</h3>
+        <div class="space-y-2">
+          <template x-for="job in schedulerJobs" :key="job.id">
+            <div class="flex items-center justify-between bg-gray-900 rounded-lg px-4 py-2">
+              <div>
+                <div class="text-sm text-white" x-text="job.id"></div>
+                <div class="text-xs text-gray-500">Next: <span x-text="job.next_run ? new Date(job.next_run).toLocaleString() : 'N/A'"></span></div>
+              </div>
+              <div class="text-xs" :class="job.last_status?.status === 'ok' ? 'text-green-400' : job.last_status?.status === 'error' ? 'text-red-400' : 'text-gray-500'"
+                   x-text="job.last_status?.status || 'waiting'"></div>
+            </div>
+          </template>
+          <div x-show="schedulerJobs.length === 0" class="text-gray-500 text-sm text-center py-4">
+            No scheduled jobs. Add a schedule to start automation.
+          </div>
+        </div>
+      </div>
+
+      <!-- Schedules list -->
+      <div class="space-y-4">
+        <template x-for="sch in schedules" :key="sch.id">
+          <div class="card">
+            <div class="flex items-start justify-between mb-3">
+              <div>
+                <div class="font-semibold text-white" x-text="sch.name"></div>
+                <div class="text-xs text-gray-400">Target: @<span x-text="getTargetName(sch.target_account_id)"></span></div>
+              </div>
+              <div class="flex items-center gap-2">
+                <span :class="sch.is_active ? 'text-green-400 bg-green-900/30' : 'text-gray-500 bg-gray-800'"
+                      class="text-xs px-2 py-0.5 rounded-full"
+                      x-text="sch.is_active ? 'Active' : 'Paused'"></span>
+                <button @click="toggleSchedule(sch.id)" class="btn-secondary text-xs">Toggle</button>
+                <button @click="openEditSchedule(sch)" class="btn-secondary text-xs"><i class="fa-solid fa-pen"></i></button>
+                <button @click="deleteSchedule(sch.id)" class="btn-danger text-xs"><i class="fa-solid fa-trash"></i></button>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-gray-400">
+              <div class="bg-gray-900 rounded p-2">
+                <div class="font-semibold text-gray-300">Scraping</div>
+                <div x-text="sch.scrape_enabled ? 'Every ' + sch.scrape_interval_hours + 'h' : 'Disabled'"></div>
+              </div>
+              <div class="bg-gray-900 rounded p-2">
+                <div class="font-semibold text-gray-300">Posting</div>
+                <div x-text="sch.post_enabled ? sch.post_times + ' (' + sch.max_posts_per_day + '/day)' : 'Disabled'"></div>
+              </div>
+              <div class="bg-gray-900 rounded p-2">
+                <div class="font-semibold text-gray-300">Agent</div>
+                <div x-text="sch.agent_enabled ? 'Every ' + sch.agent_interval_minutes + 'min' : 'Disabled'"></div>
+              </div>
+              <div class="bg-gray-900 rounded p-2">
+                <div class="font-semibold text-gray-300">Agent Limits</div>
+                <div x-text="sch.agent_max_likes_per_run + ' likes, ' + sch.agent_max_comments_per_run + ' comments'"></div>
+              </div>
+            </div>
+          </div>
+        </template>
+        <div x-show="schedules.length === 0" class="card text-center text-gray-500 py-10">
+          No schedules configured.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── LOGS ── -->
+    <div x-show="page==='logs'" x-cloak>
+      <div class="flex gap-3 mb-5 flex-wrap">
+        <select x-model="logFilter.level" @change="loadLogs()" class="input w-32 bg-gray-800">
+          <option value="">All levels</option>
+          <option value="INFO">INFO</option>
+          <option value="WARNING">WARNING</option>
+          <option value="ERROR">ERROR</option>
+        </select>
+        <select x-model="logFilter.category" @change="loadLogs()" class="input w-36 bg-gray-800">
+          <option value="">All categories</option>
+          <option value="scrape">Scrape</option>
+          <option value="download">Download</option>
+          <option value="post">Post</option>
+          <option value="agent">Agent</option>
+          <option value="caption">Caption</option>
+          <option value="general">General</option>
+        </select>
+        <button @click="loadLogs()" class="btn-secondary text-xs"><i class="fa-solid fa-sync mr-1"></i>Refresh</button>
+        <button @click="clearLogs()" class="btn-danger text-xs ml-auto"><i class="fa-solid fa-trash mr-1"></i>Clear All</button>
+      </div>
+
+      <div class="card font-mono text-xs space-y-1 max-h-[600px] overflow-y-auto">
+        <template x-for="log in botLogs" :key="log.id">
+          <div class="flex gap-3 py-1 border-b border-gray-700/30">
+            <span class="text-gray-600 shrink-0 w-36" x-text="new Date(log.created_at).toLocaleString()"></span>
+            <span :class="{
+              'text-green-400': log.level==='INFO',
+              'text-yellow-400': log.level==='WARNING',
+              'text-red-400': log.level==='ERROR',
+            }" class="font-bold w-16 shrink-0" x-text="log.level"></span>
+            <span class="text-blue-400 w-20 shrink-0" x-text="log.category"></span>
+            <span class="text-gray-300 flex-1" x-text="log.message"></span>
+          </div>
+        </template>
+        <div x-show="botLogs.length === 0" class="text-center text-gray-500 py-8">No logs yet.</div>
+      </div>
+    </div>
+
+  </div><!-- /p-6 -->
+</main>
+
+<!-- ─────────────────── MODALS ─────────────────────────────────────────────── -->
+
+<!-- Backdrop -->
+<div x-show="modal" x-cloak @click.self="modal=null"
+     class="fixed inset-0 bg-black/70 z-40 flex items-center justify-center p-4">
+
+  <!-- Add / Edit Target Account -->
+  <div x-show="modal==='addTarget' || modal==='editTarget'"
+       class="bg-gray-800 rounded-2xl w-full max-w-md border border-gray-700 shadow-2xl" @click.stop>
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+      <h2 class="font-bold text-white" x-text="modal==='editTarget' ? 'Edit Account' : 'Add Instagram Account'"></h2>
+      <button @click="modal=null" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+    <div class="p-6 space-y-4">
+      <div>
+        <label class="label">Instagram Username</label>
+        <input x-model="targetForm.username" class="input" placeholder="username (without @)" :disabled="modal==='editTarget'"/>
+      </div>
+      <div>
+        <label class="label">Password</label>
+        <input type="password" x-model="targetForm.password" class="input" placeholder="Instagram password"/>
+      </div>
+      <div>
+        <label class="label">Niche</label>
+        <input x-model="targetForm.niche" class="input" placeholder="e.g. fitness, crypto, cooking"/>
+      </div>
+      <div>
+        <label class="label">Niche Keywords (comma-separated)</label>
+        <input x-model="targetForm.niche_keywords" class="input" placeholder="gym, workout, bodybuilding, protein"/>
+      </div>
+      <div>
+        <label class="label">Niche Description (for AI context)</label>
+        <textarea x-model="targetForm.niche_description" class="input h-20 resize-none"
+                  placeholder="Describe the content style, audience, tone... AI uses this to write better comments and captions."></textarea>
+      </div>
+    </div>
+    <div class="px-6 pb-5 flex gap-3 justify-end">
+      <button @click="modal=null" class="btn-secondary">Cancel</button>
+      <button @click="saveTarget()" class="btn-primary">
+        <span x-text="modal==='editTarget' ? 'Save Changes' : 'Add Account'"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Add / Edit Source Account -->
+  <div x-show="modal==='addSource' || modal==='editSource'"
+       class="bg-gray-800 rounded-2xl w-full max-w-md border border-gray-700 shadow-2xl" @click.stop>
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+      <h2 class="font-bold text-white" x-text="modal==='editSource' ? 'Edit Source Account' : 'Add Source Account'"></h2>
+      <button @click="modal=null" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+    <div class="p-6 space-y-4">
+      <div>
+        <label class="label">Instagram Username to scrape</label>
+        <input x-model="sourceForm.username" class="input" placeholder="source_account (without @)" :disabled="modal==='editSource'"/>
+      </div>
+      <div>
+        <label class="label">Post To (Target Account)</label>
+        <select x-model="sourceForm.target_account_id" class="input bg-gray-900">
+          <option value="">Select target…</option>
+          <template x-for="acc in targetAccounts" :key="acc.id">
+            <option :value="acc.id" x-text="'@' + acc.username"></option>
+          </template>
+        </select>
+      </div>
+      <div class="flex gap-4">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" x-model="sourceForm.scrape_reels" class="w-4 h-4 accent-purple-500"/>
+          <span class="text-sm text-gray-300">Reels</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" x-model="sourceForm.scrape_posts" class="w-4 h-4 accent-purple-500"/>
+          <span class="text-sm text-gray-300">Posts</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" x-model="sourceForm.scrape_stories" class="w-4 h-4 accent-purple-500"/>
+          <span class="text-sm text-gray-300">Stories</span>
+        </label>
+      </div>
+      <div>
+        <label class="label">Max items per scrape</label>
+        <input type="number" x-model.number="sourceForm.max_items_per_scrape" min="1" max="50" class="input"/>
+      </div>
+    </div>
+    <div class="px-6 pb-5 flex gap-3 justify-end">
+      <button @click="modal=null" class="btn-secondary">Cancel</button>
+      <button @click="saveSource()" class="btn-primary">
+        <span x-text="modal==='editSource' ? 'Save Changes' : 'Add Source'"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Edit Caption -->
+  <div x-show="modal==='editCaption'"
+       class="bg-gray-800 rounded-2xl w-full max-w-lg border border-gray-700 shadow-2xl" @click.stop>
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+      <h2 class="font-bold text-white">Edit Caption</h2>
+      <button @click="modal=null" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+    <div class="p-6 space-y-4">
+      <div>
+        <label class="label">Caption</label>
+        <textarea x-model="captionForm.caption" class="input h-36 resize-none" placeholder="Caption text…"></textarea>
+      </div>
+      <div>
+        <label class="label">Hashtags</label>
+        <input x-model="captionForm.hashtags" class="input" placeholder="#hashtag1 #hashtag2 …"/>
+      </div>
+    </div>
+    <div class="px-6 pb-5 flex gap-3 justify-end">
+      <button @click="modal=null" class="btn-secondary">Cancel</button>
+      <button @click="saveCaption()" class="btn-primary">Save Caption</button>
+    </div>
+  </div>
+
+  <!-- Add / Edit Schedule -->
+  <div x-show="modal==='addSchedule' || modal==='editSchedule'"
+       class="bg-gray-800 rounded-2xl w-full max-w-2xl border border-gray-700 shadow-2xl overflow-y-auto max-h-[90vh]" @click.stop>
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+      <h2 class="font-bold text-white">Configure Automation Schedule</h2>
+      <button @click="modal=null" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+    </div>
+    <div class="p-6 space-y-5">
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="label">Schedule Name</label>
+          <input x-model="scheduleForm.name" class="input" placeholder="My Schedule"/>
+        </div>
+        <div>
+          <label class="label">Target Account</label>
+          <select x-model="scheduleForm.target_account_id" class="input bg-gray-900">
+            <option value="">Select account…</option>
+            <template x-for="acc in targetAccounts" :key="acc.id">
+              <option :value="acc.id" x-text="'@' + acc.username"></option>
+            </template>
+          </select>
+        </div>
+      </div>
+
+      <!-- Scraping -->
+      <div class="bg-gray-900 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="font-semibold text-white">📥 Scraping</h4>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" x-model="scheduleForm.scrape_enabled" class="w-4 h-4 accent-purple-500"/>
+            <span class="text-sm text-gray-400">Enabled</span>
+          </label>
+        </div>
+        <div>
+          <label class="label">Scrape Every (hours)</label>
+          <input type="number" x-model.number="scheduleForm.scrape_interval_hours" min="1" max="24" class="input w-24"/>
+        </div>
+      </div>
+
+      <!-- Posting -->
+      <div class="bg-gray-900 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="font-semibold text-white">📤 Posting</h4>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" x-model="scheduleForm.post_enabled" class="w-4 h-4 accent-purple-500"/>
+            <span class="text-sm text-gray-400">Enabled</span>
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="label">Post Times (HH:MM, comma-separated)</label>
+            <input x-model="scheduleForm.post_times" class="input" placeholder="09:00,13:00,18:00,21:00"/>
+          </div>
+          <div>
+            <label class="label">Max Posts/Day</label>
+            <input type="number" x-model.number="scheduleForm.max_posts_per_day" min="1" max="12" class="input"/>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Agent -->
+      <div class="bg-gray-900 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="font-semibold text-white">🤖 AI Agent</h4>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" x-model="scheduleForm.agent_enabled" class="w-4 h-4 accent-purple-500"/>
+            <span class="text-sm text-gray-400">Enabled</span>
+          </label>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div>
+            <label class="label">Run Every (minutes)</label>
+            <input type="number" x-model.number="scheduleForm.agent_interval_minutes" min="10" max="240" class="input"/>
+          </div>
+          <div class="flex items-center gap-3 pt-4">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" x-model="scheduleForm.agent_like_enabled" class="w-4 h-4 accent-pink-500"/>
+              <span class="text-sm text-gray-300">❤️ Likes</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" x-model="scheduleForm.agent_comment_enabled" class="w-4 h-4 accent-purple-500"/>
+              <span class="text-sm text-gray-300">💬 Comments</span>
+            </label>
+          </div>
+          <div>
+            <label class="label">Max Likes/Run</label>
+            <input type="number" x-model.number="scheduleForm.agent_max_likes_per_run" min="1" max="50" class="input"/>
+          </div>
+          <div>
+            <label class="label">Max Comments/Run</label>
+            <input type="number" x-model.number="scheduleForm.agent_max_comments_per_run" min="0" max="15" class="input"/>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="px-6 pb-5 flex gap-3 justify-end">
+      <button @click="modal=null" class="btn-secondary">Cancel</button>
+      <button @click="saveSchedule()" class="btn-primary">Save Schedule</button>
+    </div>
+  </div>
+
+</div><!-- /modal backdrop -->
+
+<!-- Toast notification -->
+<div x-show="toast.msg" x-cloak x-transition
+     :class="toast.type==='error' ? 'bg-red-600' : toast.type==='warning' ? 'bg-yellow-600' : 'bg-green-600'"
+     class="toast">
+  <i :class="toast.type==='error' ? 'fa-solid fa-circle-xmark' : toast.type==='warning' ? 'fa-solid fa-triangle-exclamation' : 'fa-solid fa-circle-check'"
+     class="mr-2"></i>
+  <span x-text="toast.msg"></span>
+</div>
+
+<!-- ─────────────────── JS APP ──────────────────────────────────────────────── -->
+<script>
+const API = '';
+
+async function fetchJSON(url, opts = {}) {
+  const r = await fetch(API + url, {
+    headers: {'Content-Type': 'application/json'},
+    ...opts,
+  });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({detail: r.statusText}));
+    throw new Error(e.detail || 'Request failed');
+  }
+  return r.json();
+}
+
+function app() {
+  return {
+    page: 'dashboard',
+    loading: false,
+    modal: null,
+    toast: {msg: '', type: 'success'},
+
+    // Data
+    stats: {},
+    targetAccounts: [],
+    sourceAccounts: [],
+    schedules: [],
+    contentItems: [],
+    contentStats: null,
+    agentLogs: [],
+    agentStats: {today: {}, total: {}},
+    botLogs: [],
+    schedulerRunning: false,
+    schedulerJobs: [],
+    jobCount: 0,
+
+    // Forms
+    targetForm: {username:'',password:'',niche:'',niche_keywords:'',niche_description:''},
+    sourceForm: {username:'',target_account_id:'',scrape_reels:true,scrape_posts:true,scrape_stories:false,max_items_per_scrape:10},
+    scheduleForm: this._defaultSchedule(),
+    captionForm: {item_id:null, caption:'', hashtags:''},
+    agentRun: {target_account_id:'', like_count:5, comment_count:2},
+
+    // Filters
+    sourceFilter: '',
+    contentFilter: {target_id:'', status:''},
+    logFilter: {level:'', category:''},
+
+    _defaultSchedule() {
+      return {
+        name:'Default Schedule', target_account_id:'',
+        scrape_interval_hours:6, scrape_enabled:true,
+        post_times:'09:00,13:00,18:00,21:00', post_enabled:true, max_posts_per_day:4,
+        agent_enabled:true, agent_interval_minutes:30,
+        agent_like_enabled:true, agent_comment_enabled:true,
+        agent_max_likes_per_run:10, agent_max_comments_per_run:3,
+      };
+    },
+
+    showToast(msg, type='success') {
+      this.toast = {msg, type};
+      setTimeout(() => this.toast = {msg:'', type:'success'}, 3500);
+    },
+
+    async init() {
+      await this.refreshAll();
+      setInterval(() => this.loadSchedulerStatus(), 15000);
+    },
+
+    pageTitle() {
+      const titles = {
+        dashboard: 'Dashboard', accounts: 'Target Accounts',
+        sources: 'Source Accounts', content: 'Content Queue',
+        agent: 'AI Agent', scheduler: 'Scheduler', logs: 'Activity Logs',
+      };
+      return titles[this.page] || '';
+    },
+
+    async refreshAll() {
+      this.loading = true;
+      await Promise.all([
+        this.loadStats(),
+        this.loadTargets(),
+        this.loadSources(),
+        this.loadSchedulerStatus(),
+      ]);
+      this.loading = false;
+    },
+
+    async loadStats() {
+      this.stats = await fetchJSON('/api/dashboard').catch(() => ({}));
+    },
+
+    async loadTargets() {
+      this.targetAccounts = await fetchJSON('/api/accounts/targets').catch(() => []);
+    },
+
+    async loadSources() {
+      this.sourceAccounts = await fetchJSON('/api/accounts/sources').catch(() => []);
+    },
+
+    get filteredSources() {
+      if (!this.sourceFilter) return this.sourceAccounts;
+      return this.sourceAccounts.filter(s => s.target_account_id == this.sourceFilter);
+    },
+
+    async loadContent() {
+      const p = new URLSearchParams();
+      if (this.contentFilter.target_id) p.set('target_id', this.contentFilter.target_id);
+      if (this.contentFilter.status) p.set('status', this.contentFilter.status);
+      p.set('limit', '100');
+      this.contentItems = await fetchJSON('/api/content/queue?' + p).catch(() => []);
+      const sp = new URLSearchParams();
+      if (this.contentFilter.target_id) sp.set('target_id', this.contentFilter.target_id);
+      this.contentStats = await fetchJSON('/api/content/stats?' + sp).catch(() => null);
+    },
+
+    async loadSchedulerStatus() {
+      const s = await fetchJSON('/api/scheduler/status').catch(() => ({}));
+      this.schedulerRunning = s.running ?? false;
+      this.schedulerJobs = s.jobs ?? [];
+      this.jobCount = s.job_count ?? 0;
+    },
+
+    async loadSchedules() {
+      this.schedules = await fetchJSON('/api/scheduler/schedules').catch(() => []);
+    },
+
+    async loadAgentLogs() {
+      this.agentLogs = await fetchJSON('/api/agent/logs?limit=100').catch(() => []);
+      this.agentStats = await fetchJSON('/api/agent/stats').catch(() => ({today:{},total:{}}));
+    },
+
+    async loadLogs() {
+      const p = new URLSearchParams();
+      if (this.logFilter.level) p.set('level', this.logFilter.level);
+      if (this.logFilter.category) p.set('category', this.logFilter.category);
+      p.set('limit', '300');
+      this.botLogs = await fetchJSON('/api/logs?' + p).catch(() => []);
+    },
+
+    // ── Watch page changes ────────────────────────────────────────────────
+    $watch_page(val) {
+      if (val === 'content') this.loadContent();
+      if (val === 'scheduler') this.loadSchedules();
+      if (val === 'agent') this.loadAgentLogs();
+      if (val === 'logs') this.loadLogs();
+    },
+
+    // ── Target accounts ───────────────────────────────────────────────────
+    openModal(name) { this.modal = name; },
+
+    openEditTarget(acc) {
+      this.targetForm = {...acc, password: ''};
+      this.modal = 'editTarget';
+    },
+
+    async saveTarget() {
+      try {
+        if (this.modal === 'editTarget') {
+          const id = this.targetForm.id;
+          const data = {...this.targetForm};
+          delete data.id;
+          if (!data.password) delete data.password;
+          await fetchJSON(`/api/accounts/targets/${id}`, {method:'PATCH', body:JSON.stringify(data)});
+          this.showToast('Account updated');
+        } else {
+          await fetchJSON('/api/accounts/targets', {method:'POST', body:JSON.stringify(this.targetForm)});
+          this.showToast('Account added');
+        }
+        this.modal = null;
+        this.targetForm = {username:'',password:'',niche:'',niche_keywords:'',niche_description:''};
+        await this.loadTargets();
+        await this.loadStats();
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    async deleteTarget(id) {
+      if (!confirm('Delete this account? All associated data will be removed.')) return;
+      try {
+        await fetchJSON(`/api/accounts/targets/${id}`, {method:'DELETE'});
+        this.showToast('Account deleted');
+        await this.loadTargets();
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    async testLogin(id) {
+      try {
+        this.showToast('Testing login…', 'success');
+        await fetchJSON(`/api/accounts/targets/${id}/login`, {method:'POST'});
+        this.showToast('Login successful ✓');
+        await this.loadTargets();
+      } catch(e) { this.showToast('Login failed: ' + e.message, 'error'); }
+    },
+
+    async syncAccount(id) {
+      try {
+        await fetchJSON(`/api/accounts/targets/${id}/sync`, {method:'POST'});
+        this.showToast('Stats synced');
+        await this.loadTargets();
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    // ── Source accounts ───────────────────────────────────────────────────
+    openEditSource(src) {
+      this.sourceForm = {...src};
+      this.modal = 'editSource';
+    },
+
+    async saveSource() {
+      try {
+        if (this.modal === 'editSource') {
+          const id = this.sourceForm.id;
+          const data = {
+            scrape_reels: this.sourceForm.scrape_reels,
+            scrape_posts: this.sourceForm.scrape_posts,
+            scrape_stories: this.sourceForm.scrape_stories,
+            max_items_per_scrape: this.sourceForm.max_items_per_scrape,
+          };
+          await fetchJSON(`/api/accounts/sources/${id}`, {method:'PATCH', body:JSON.stringify(data)});
+          this.showToast('Source updated');
+        } else {
+          await fetchJSON('/api/accounts/sources', {method:'POST', body:JSON.stringify({
+            ...this.sourceForm,
+            target_account_id: parseInt(this.sourceForm.target_account_id),
+          })});
+          this.showToast('Source account added');
+        }
+        this.modal = null;
+        this.sourceForm = {username:'',target_account_id:'',scrape_reels:true,scrape_posts:true,scrape_stories:false,max_items_per_scrape:10};
+        await this.loadSources();
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    async toggleSource(src) {
+      try {
+        await fetchJSON(`/api/accounts/sources/${src.id}`, {
+          method:'PATCH',
+          body:JSON.stringify({is_active: !src.is_active}),
+        });
+        await this.loadSources();
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    async deleteSource(id) {
+      if (!confirm('Remove this source account?')) return;
+      try {
+        await fetchJSON(`/api/accounts/sources/${id}`, {method:'DELETE'});
+        this.showToast('Source removed');
+        await this.loadSources();
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    // ── Content ───────────────────────────────────────────────────────────
+    async approveItem(id) {
+      try {
+        await fetchJSON(`/api/content/queue/${id}`, {method:'PATCH', body:JSON.stringify({action:'approve'})});
+        this.showToast('Item queued');
+        await this.loadContent();
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    async skipItem(id) {
+      try {
+        await fetchJSON(`/api/content/queue/${id}`, {method:'PATCH', body:JSON.stringify({action:'skip'})});
+        this.showToast('Item skipped');
+        await this.loadContent();
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    async deleteItem(id) {
+      if (!confirm('Delete this content item?')) return;
+      try {
+        await fetchJSON(`/api/content/queue/${id}`, {method:'DELETE'});
+        this.showToast('Deleted');
+        await this.loadContent();
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    openEditCaption(item) {
+      this.captionForm = {item_id: item.id, caption: item.caption, hashtags: item.hashtags};
+      this.modal = 'editCaption';
+    },
+
+    async saveCaption() {
+      try {
+        await fetchJSON(`/api/content/queue/${this.captionForm.item_id}`, {
+          method:'PATCH',
+          body:JSON.stringify({action:'approve', caption:this.captionForm.caption, hashtags:this.captionForm.hashtags}),
+        });
+        this.showToast('Caption saved and item queued');
+        this.modal = null;
+        await this.loadContent();
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    async triggerScrape(targetId) {
+      if (!targetId) return;
+      try {
+        await fetchJSON('/api/content/scrape', {method:'POST', body:JSON.stringify({target_account_id:parseInt(targetId)})});
+        this.showToast('Scraping started in background…');
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    async triggerDownload(targetId) {
+      if (!targetId) return;
+      try {
+        await fetchJSON(`/api/content/download?target_id=${targetId}`, {method:'POST'});
+        this.showToast('Download + caption generation started…');
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    async triggerPipeline(targetId) {
+      try {
+        await fetchJSON(`/api/content/pipeline?target_id=${targetId}`, {method:'POST'});
+        this.showToast('Full pipeline started…');
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    async postNow(targetId) {
+      try {
+        const r = await fetchJSON(`/api/content/post-now?target_id=${targetId}`, {method:'POST'});
+        this.showToast(`Posted item #${r.item_id} (${r.status})`);
+        await this.loadStats();
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    // ── Agent ──────────────────────────────────────────────────────────────
+    async runAgent() {
+      if (!this.agentRun.target_account_id) { this.showToast('Select an account', 'warning'); return; }
+      try {
+        await fetchJSON('/api/agent/run', {
+          method:'POST',
+          body:JSON.stringify({
+            ...this.agentRun,
+            target_account_id: parseInt(this.agentRun.target_account_id),
+          }),
+        });
+        this.showToast('Agent running in background…');
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    // ── Scheduler ──────────────────────────────────────────────────────────
+    async startScheduler() {
+      try {
+        await fetchJSON('/api/scheduler/start', {method:'POST'});
+        this.showToast('Scheduler started');
+        await this.loadSchedulerStatus();
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    async stopScheduler() {
+      try {
+        await fetchJSON('/api/scheduler/stop', {method:'POST'});
+        this.showToast('Scheduler stopped', 'warning');
+        await this.loadSchedulerStatus();
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    openEditSchedule(sch) {
+      this.scheduleForm = {...sch};
+      this.modal = 'editSchedule';
+    },
+
+    async saveSchedule() {
+      try {
+        const data = {...this.scheduleForm, target_account_id: parseInt(this.scheduleForm.target_account_id)};
+        if (this.modal === 'editSchedule') {
+          const id = data.id; delete data.id;
+          await fetchJSON(`/api/scheduler/schedules/${id}`, {method:'PUT', body:JSON.stringify(data)});
+          this.showToast('Schedule updated');
+        } else {
+          await fetchJSON('/api/scheduler/schedules', {method:'POST', body:JSON.stringify(data)});
+          this.showToast('Schedule created');
+        }
+        this.modal = null;
+        this.scheduleForm = this._defaultSchedule();
+        await this.loadSchedules();
+        await this.loadSchedulerStatus();
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    async toggleSchedule(id) {
+      try {
+        const r = await fetchJSON(`/api/scheduler/schedules/${id}/toggle`, {method:'PATCH'});
+        this.showToast(r.is_active ? 'Schedule activated' : 'Schedule paused');
+        await this.loadSchedules();
+        await this.loadSchedulerStatus();
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    async deleteSchedule(id) {
+      if (!confirm('Delete this schedule? Automation will stop.')) return;
+      try {
+        await fetchJSON(`/api/scheduler/schedules/${id}`, {method:'DELETE'});
+        this.showToast('Schedule deleted');
+        await this.loadSchedules();
+        await this.loadSchedulerStatus();
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    getTargetName(id) {
+      const t = this.targetAccounts.find(a => a.id == id);
+      return t ? t.username : id;
+    },
+
+    // ── Logs ───────────────────────────────────────────────────────────────
+    async clearLogs() {
+      if (!confirm('Clear all logs?')) return;
+      try {
+        await fetchJSON('/api/logs', {method:'DELETE'});
+        this.showToast('Logs cleared');
+        await this.loadLogs();
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+  };
+}
+</script>
+</body>
+</html>
